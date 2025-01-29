@@ -1,0 +1,5 @@
+rpc_endpoint = "https://rpc.sepolia.org"
+blocks_in_memory = 1000
+rotation_blocks = 10000
+metrics_port = 9090
+data_dir = "./data"

@@ -8,8 +8,8 @@ RUN apk add --no-cache musl-dev
 # Copy the source code
 COPY . .
 
-# Build the application
-RUN cargo build --release
+# Remove existing Cargo.lock and build
+RUN rm -f Cargo.lock && cargo build --release
 
 FROM alpine:latest
 

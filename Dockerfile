@@ -5,23 +5,11 @@ WORKDIR /usr/src/app
 # Install build dependencies
 RUN apk add --no-cache musl-dev
 
-# First copy only the Cargo.toml files
-COPY Cargo.toml ./
-
-# Create a dummy main.rs to build dependencies
-RUN mkdir src && \
-    echo "fn main() {}" > src/main.rs && \
-    cargo update && \
-    cargo build --release && \
-    rm -f target/release/deps/eth_high_perf_indexer*
-
-# Now copy the real source code
+# Copy the source code
 COPY . .
 
-# Clean any existing Cargo.lock and rebuild
-RUN rm -f Cargo.lock && \
-    cargo update && \
-    cargo build --release
+# Build the application
+RUN cargo build --release
 
 FROM alpine:latest
 

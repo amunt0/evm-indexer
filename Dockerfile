@@ -1,5 +1,4 @@
 FROM rust:1.76-alpine as builder
-
 WORKDIR /usr/src/app
 
 # Install build dependencies
@@ -9,7 +8,7 @@ RUN apk add --no-cache musl-dev
 COPY . .
 
 # Remove existing Cargo.lock and build
-RUN cargo build --release
+RUN rm -f Cargo.lock && cargo build --release
 
 FROM alpine:latest
 

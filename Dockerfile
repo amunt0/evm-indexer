@@ -1,8 +1,12 @@
 FROM rust:1.76-alpine as builder
+
 WORKDIR /usr/src/app
 
 # Install build dependencies
-RUN apk add --no-cache musl-dev
+RUN apk add --no-cache \
+    musl-dev \
+    openssl-dev \
+    pkgconfig
 
 # Copy the source code
 COPY . .
@@ -11,6 +15,9 @@ COPY . .
 RUN rm -f Cargo.lock && cargo build --release
 
 FROM alpine:latest
+
+# Install runtime dependencies
+RUN apk add --no-cache openssl
 
 # Create necessary directories
 RUN mkdir -p /etc/eth-indexer /data/eth-indexer && \

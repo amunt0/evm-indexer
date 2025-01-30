@@ -70,14 +70,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
-      - name: Install dependencies
-        run: |
-          apk add --no-cache \
-            musl-dev \
-            pkgconfig \
-            openssl-dev \
-            build-base
-
       - name: Build and push
         uses: docker/build-push-action@v5
         with:

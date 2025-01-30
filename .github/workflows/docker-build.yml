@@ -87,7 +87,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           build-args: |
             DOCKER_BUILDKIT=1
-          outputs: type=docker
+          outputs: type=image  # Use 'image' instead of 'docker'
           load: false  # Prevent loading the image locally, as it's being pushed directly
 
       - name: Move cache

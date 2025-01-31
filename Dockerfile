@@ -5,11 +5,17 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /usr/src/app
-COPY Cargo.toml ./
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-RUN cargo init && cargo build --release
-RUN rm -rf src/
 
+# Copy only Cargo.toml first to cache dependencies
+COPY Cargo.toml ./
+
+# Create dummy src directory and build dependencies
+RUN mkdir -p src && \
+    echo "fn main() {}" > src/main.rs && \
+    cargo build --release && \
+    rm -rf src target/release/deps/eth_high_perf_indexer*
+
+# Copy actual source code
 COPY . .
 RUN cargo build --release
 

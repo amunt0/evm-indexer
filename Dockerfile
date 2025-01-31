@@ -14,7 +14,7 @@ RUN apk add --no-cache \
 ENV RUSTFLAGS="-C target-feature=+crt-static"
 ENV CARGO_PROFILE_RELEASE_LTO="true"
 ENV CARGO_PROFILE_RELEASE_CODEGEN_UNITS="1"
-ENV CARGO_NET_GIT_FETCH_WITH_CLI="true"  # Comments should be on separate lines, not inline
+ENV CARGO_NET_GIT_FETCH_WITH_CLI="true"
 
 WORKDIR /usr/src/app
 

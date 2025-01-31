@@ -6,7 +6,6 @@ RUN apk add --no-cache \
     openssl-dev \
     pkgconfig \
     build-base \
-    libressl-dev \
     cmake \
     git
 
@@ -31,7 +30,7 @@ RUN cargo build --release
 FROM alpine:latest
 
 # Install runtime dependencies
-RUN apk add --no-cache openssl libressl
+RUN apk add --no-cache openssl
 
 # Create necessary directories
 RUN mkdir -p /etc/eth-indexer /data/eth-indexer && chmod 777 /data/eth-indexer

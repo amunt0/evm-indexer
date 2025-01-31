@@ -11,16 +11,16 @@ RUN apk add --no-cache \
 
 WORKDIR /usr/src/app
 
-# Create src directory and copy only files needed for dependency caching
+# Copy only the dependency files first
 COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && \
-    touch src/lib.rs && \
-    echo "fn main() {}" > src/main.rs
 
-# Build and cache dependencies 
-RUN cargo build --release
+# Create a dummy main.rs to build dependencies
+RUN mkdir src && echo "fn main() {}" > src/main.rs
 
-# Copy actual source code
+# Pre-build dependencies and cache them
+RUN cargo build --release && rm -rf src/
+
+# Now copy the actual source code
 COPY . .
 
 # Build the application

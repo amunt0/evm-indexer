@@ -1,32 +1,40 @@
-FROM rust:1.76-slim-bookworm as builder
+FROM rust:1.76-alpine as builder
+
+# Install build dependencies first - this layer can be cached
+RUN apk add --no-cache \
+    musl-dev \
+    openssl-dev \
+    pkgconfig \
+    build-base \
+    libressl-dev \
+    cmake \
+    git
 
 WORKDIR /usr/src/app
 
-# Install build dependencies
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    pkg-config \
-    libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Copy only the dependency files first
+COPY Cargo.toml Cargo.lock ./
 
-# Copy the source code
+# Create a dummy main.rs to build dependencies
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+
+# Pre-build dependencies and cache them
+RUN cargo build --release && rm -rf src/
+
+# Now copy the actual source code
 COPY . .
 
-# Remove existing Cargo.lock and build
-RUN rm -f Cargo.lock && cargo build --release
+# Build the application
+RUN cargo build --release
 
-FROM debian:bookworm-slim
+# Runtime stage
+FROM alpine:latest
 
 # Install runtime dependencies
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    ca-certificates \
-    libssl3 \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache openssl libressl
 
 # Create necessary directories
-RUN mkdir -p /etc/eth-indexer /data/eth-indexer && \
-    chmod 777 /data/eth-indexer
+RUN mkdir -p /etc/eth-indexer /data/eth-indexer && chmod 777 /data/eth-indexer
 
 # Copy the binary and config
 COPY --from=builder /usr/src/app/target/release/eth-high-perf-indexer /usr/local/bin/

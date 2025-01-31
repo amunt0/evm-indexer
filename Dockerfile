@@ -8,8 +8,9 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /usr/src/app
-COPY Cargo.* ./
+COPY Cargo.toml ./
 RUN mkdir src && echo "fn main() {}" > src/main.rs
+RUN cargo new --bin .
 RUN cargo build --release
 RUN rm -rf src/
 

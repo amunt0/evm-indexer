@@ -1,13 +1,17 @@
 FROM rust:1.76-alpine as builder
 
-# Install build dependencies first - this layer can be cached
 RUN apk add --no-cache \
     musl-dev \
     openssl-dev \
+    openssl-libs-static \  # Added
     pkgconfig \
     build-base \
     cmake \
     git
+
+ENV OPENSSL_STATIC=1
+ENV OPENSSL_LIB_DIR=/usr/lib
+ENV OPENSSL_INCLUDE_DIR=/usr/include/openssl
 
 WORKDIR /usr/src/app
 

@@ -1,33 +1,50 @@
-FROM rust:1.76-slim-bullseye as builder
+FROM rust:1.76-alpine as builder
 
-RUN apt-get update && apt-get install -y \
-    pkg-config libssl-dev build-essential cmake \
-    && rm -rf /var/lib/apt/lists/*
+# Install build dependencies first - this layer can be cached
+RUN apk add --no-cache \
+    musl-dev \
+    openssl-dev \
+    pkgconfig \
+    build-base \
+    libressl-dev \
+    cmake \
+    git
 
 WORKDIR /usr/src/app
 
-# Copy only Cargo.toml first to cache dependencies
-COPY Cargo.toml ./
+# Copy only the dependency files first
+COPY Cargo.toml Cargo.lock ./
 
-# Create dummy src directory and build dependencies
-RUN mkdir -p src && \
-    echo "fn main() {}" > src/main.rs && \
-    cargo build --release && \
-    rm -rf src target/release/deps/eth_high_perf_indexer*
+# Create a dummy main.rs to build dependencies
+RUN mkdir src && echo "fn main() {}" > src/main.rs
 
-# Copy actual source code
+# Pre-build dependencies and cache them
+RUN cargo build --release && rm -rf src/
+
+# Now copy the actual source code
 COPY . .
+
+# Build the application
 RUN cargo build --release
 
-FROM debian:bullseye-slim
-RUN apt-get update && apt-get install -y \
-    libssl1.1 ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# Runtime stage
+FROM alpine:latest
 
+# Install runtime dependencies
+RUN apk add --no-cache openssl libressl
+
+# Create necessary directories
+RUN mkdir -p /etc/eth-indexer /data/eth-indexer && chmod 777 /data/eth-indexer
+
+# Copy the binary and config
 COPY --from=builder /usr/src/app/target/release/eth-high-perf-indexer /usr/local/bin/
 COPY --from=builder /usr/src/app/config/default.toml /etc/eth-indexer/config.toml
 
-RUN mkdir -p /data/eth-indexer && chmod 777 /data/eth-indexer
+# Set environment variable for config path
 ENV CONFIG_PATH=/etc/eth-indexer/config.toml
+
+# Expose metrics port
 EXPOSE 9090
+
+# Set the entrypoint
 ENTRYPOINT ["eth-high-perf-indexer"]

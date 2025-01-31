@@ -7,7 +7,11 @@ RUN apk add --no-cache \
     pkgconfig \
     build-base \
     cmake \
-    git
+    git \
+    curl
+
+# Ensure Rustup and Cargo are updated
+RUN rustup self update && rustup update stable
 
 WORKDIR /usr/src/app
 

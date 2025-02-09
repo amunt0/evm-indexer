@@ -19,7 +19,7 @@ RUN mkdir src && echo "fn main() {}" > src/main.rs
 RUN cargo build --release && rm -rf src/
 # Now copy the actual source code
 COPY . .
-# Build the application
+# Build the application 
 RUN cargo build --release
 # Runtime stage
 FROM alpine:latest

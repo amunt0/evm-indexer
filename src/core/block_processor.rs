@@ -42,38 +42,13 @@ impl BlockProcessor {
         Ok(block_number.as_u64())
     }
 
-    async fn fetch_block(&self, block_number: u64) -> Result<Block> {
-        let block = self.web3_client
-            .eth()
-            .block_with_txs(BlockId::Number(BlockNumber::Number(block_number.into())))
-            .await
-            .map_err(|e| IndexerError::RpcError(e.to_string()))?
-            .ok_or_else(|| IndexerError::RpcError("Block not found".into()))?;
-
-        let transactions = block.transactions.into_iter()
-            .map(|tx| crate::models::Transaction {
-                hash: format!("{:?}", tx.hash),
-                from: format!("{:?}", tx.from),
-                to: tx.to.map(|addr| format!("{:?}", addr)),
-                value: tx.value.to_string(),
-            })
-            .collect();
-
-        Ok(Block {
-            number: block.number.unwrap().as_u64(),
-            hash: format!("{:?}", block.hash.unwrap()),
-            transactions,
-            timestamp: block.timestamp.as_u64(),
-        })
-    }
-
     pub async fn process_blocks(&self, start_block: Option<u64>) -> Result<()> {
         info!(
             event = "block_processing_started",
             message = "Starting block processing",
             start_block = ?start_block,
         );
-    
+
         let mut current_block = match start_block {
             Some(block) => {
                 info!(
@@ -93,7 +68,7 @@ impl BlockProcessor {
                 latest
             },
         };
-    
+
         self.latest_block.store(current_block, Ordering::SeqCst);
         
         info!(
@@ -101,8 +76,9 @@ impl BlockProcessor {
             message = "Entering main processing loop",
             current_block = current_block
         );
-    
+
         loop {
+            let start_time = std::time::Instant::now();
             let latest_block = match self.get_latest_block_number().await {
                 Ok(block) => block,
                 Err(e) => {
@@ -123,12 +99,17 @@ impl BlockProcessor {
                 latest_block = latest_block,
                 blocks_behind = latest_block.saturating_sub(current_block)
             );
-    
+
+            metrics.record_sync_status(current_block, latest_block);
+
             while current_block <= latest_block {
                 match self.fetch_block(current_block).await {
                     Ok(block) => {
                         match self.blocks_channel.0.send(block.clone()) {
                             Ok(_) => {
+                                metrics.record_block(&block);
+                                metrics.record_processing_time(start_time);
+                                
                                 info!(
                                     event = "block_processed",
                                     message = "Successfully processed block",
@@ -160,8 +141,7 @@ impl BlockProcessor {
                     }
                 }
             }
-    
-            // If we've caught up, wait a bit before checking for new blocks
+
             info!(
                 event = "sync_complete",
                 message = "Caught up to latest block, waiting for new blocks",

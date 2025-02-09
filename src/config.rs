@@ -1,19 +1,21 @@
-use serde::Deserialize;
-use std::path::PathBuf;
 use anyhow::Result;
-use config::{Config as ConfigSource, File, Environment};
+use std::path::PathBuf;
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Clone)]
 pub struct Config {
     pub rpc_endpoint: String,
     pub blocks_in_memory: usize,
-    pub rotation_blocks: usize,
-    pub data_dir: PathBuf,
     pub metrics_port: u16,
+    pub data_dir: PathBuf,
+    pub rotation_blocks: u64,
     pub start_block: Option<u64>,
 }
 
 impl Config {
+    pub fn load() -> Result<Self> {
+        Self::from_env()
+    }
+
     pub fn from_env() -> Result<Self> {
         Ok(Self {
             rpc_endpoint: std::env::var("RPC_ENDPOINT")
@@ -27,8 +29,14 @@ impl Config {
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(9090),
             data_dir: PathBuf::from(std::env::var("DATA_DIR")
-                .unwrap_or_else(|_| "./data".to_string())),
+                .unwrap_or_else(|_| "/data/eth-indexer".to_string())),
+            rotation_blocks: std::env::var("ROTATION_BLOCKS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(10000),
+            start_block: std::env::var("START_BLOCK")
+                .ok()
+                .and_then(|v| v.parse().ok()),
         })
     }
 }
-

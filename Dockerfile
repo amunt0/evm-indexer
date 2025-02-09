@@ -15,12 +15,12 @@ WORKDIR /usr/src/app
 COPY Cargo.toml Cargo.lock ./
 # Create a dummy main.rs to build dependencies
 RUN mkdir src && echo "fn main() {}" > src/main.rs
-# Pre-build dependencies and cache them
-RUN cargo build --release && rm -rf src/
+# Pre-build dependencies with features
+RUN cargo build --release --features tracing-subscriber/chrono && rm -rf src/
 # Now copy the actual source code
 COPY . .
 # Build the application 
-RUN cargo build --release
+RUN cargo build --release --features tracing-subscriber/chrono
 # Runtime stage
 FROM alpine:latest
 # Install runtime dependencies

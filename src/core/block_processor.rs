@@ -4,7 +4,7 @@ use crate::utils::error::IndexerError;
 use anyhow::Result;
 use crossbeam::channel;
 use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
-use tracing::{info, warn};
+use tracing::{info, error};
 use web3::{
     types::{BlockNumber, BlockId},
     Web3,

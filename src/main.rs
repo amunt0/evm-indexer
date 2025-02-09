@@ -1,7 +1,6 @@
 use anyhow::Result;
 use mimalloc::MiMalloc;
-use tracing::{info, warn, error, Level};
-use tracing_subscriber::fmt::time::ChronoUtc;
+use tracing::info;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -14,47 +13,38 @@ mod utils;
 use crate::core::Indexer;
 
 fn init_logging() -> Result<()> {
-    // Start with basic logging first
     tracing_subscriber::fmt()
+        .json()
         .with_max_level(tracing::Level::INFO)
         .init();
 
-    // Let's write directly to stdout for testing
-    println!("Logging initialized");
-    println!("CONFIG_PATH={}", std::env::var("CONFIG_PATH").unwrap_or_default());
-    
-    info!(event = "startup", message = "Starting eth-indexer");
-    
+    info!(
+        event = "startup",
+        message = "Starting eth-indexer",
+        version = env!("CARGO_PKG_VERSION"),
+    );
+
     Ok(())
 }
 
 #[tokio::main]
-async fn main() {
-    // Use println! first to ensure we can at least see basic output
-    println!("Starting up...");
-
-    if let Err(e) = run().await {
-        eprintln!("Error: {:?}", e);
-        std::process::exit(1);
-    }
-}
-
-async fn run() -> Result<()> {
-    // Initialize logging
-    match init_logging() {
-        Ok(_) => println!("Logging initialized successfully"),
-        Err(e) => println!("Failed to initialize logging: {:?}", e),
-    }
+async fn main() -> Result<()> {
+    // Initialize logging first thing
+    init_logging()?;
+    
+    // Log config loading attempt
+    info!(event = "config_loading", message = "Loading configuration");
     
     // Load configuration
-    println!("Loading config...");
     let config = config::Config::from_env()?;
-    println!("Config loaded: {:?}", config);
+    info!(
+        event = "config_loaded",
+        message = "Configuration loaded successfully",
+        config = ?config,
+    );
     
     // Create and run indexer
-    println!("Creating indexer...");
-    let mut indexer = Indexer::new(config).await?;
-    println!("Running indexer...");
+    let indexer = Indexer::new(config).await?;  // Removed mut as it's not needed
     indexer.run().await?;
     
     Ok(())

@@ -9,6 +9,7 @@ use web3::{
     types::{BlockNumber, BlockId},
     Web3,
 };
+use crate::core::MetricsCollector;
 
 #[derive(Clone)]
 pub struct BlockProcessor {
@@ -16,22 +17,25 @@ pub struct BlockProcessor {
     latest_block: Arc<AtomicU64>,
     buffer_size: usize,
     blocks_channel: (channel::Sender<Block>, channel::Receiver<Block>),
+    metrics: MetricsCollector,
 }
 
 impl BlockProcessor {
     pub async fn new(config: &Config) -> Result<Self> {
         let transport = web3::transports::Http::new(&config.rpc_endpoint)?;
         let web3_client = Web3::new(transport);
-        
         let blocks_channel = channel::bounded(config.blocks_in_memory);
+        let metrics = MetricsCollector::new(config.metrics_port)?;
         
         Ok(Self {
             web3_client,
             latest_block: Arc::new(AtomicU64::new(0)),
             buffer_size: config.blocks_in_memory,
             blocks_channel,
+            metrics,
         })
     }
+
     pub async fn get_latest_block_number(&self) -> Result<u64> {
         let block_number = self.web3_client
             .eth()
@@ -40,6 +44,31 @@ impl BlockProcessor {
             .map_err(|e| IndexerError::RpcError(e.to_string()))?;
         
         Ok(block_number.as_u64())
+    }
+
+    async fn fetch_block(&self, block_number: u64) -> Result<Block> {
+        let block = self.web3_client
+            .eth()
+            .block_with_txs(BlockId::Number(BlockNumber::Number(block_number.into())))
+            .await
+            .map_err(|e| IndexerError::RpcError(e.to_string()))?
+            .ok_or_else(|| IndexerError::RpcError("Block not found".into()))?;
+
+        let transactions = block.transactions.into_iter()
+            .map(|tx| crate::models::Transaction {
+                hash: format!("{:?}", tx.hash),
+                from: format!("{:?}", tx.from),
+                to: tx.to.map(|addr| format!("{:?}", addr)),
+                value: tx.value.to_string(),
+            })
+            .collect();
+
+        Ok(Block {
+            number: block.number.unwrap().as_u64(),
+            hash: format!("{:?}", block.hash.unwrap()),
+            transactions,
+            timestamp: block.timestamp.as_u64(),
+        })
     }
 
     pub async fn process_blocks(&self, start_block: Option<u64>) -> Result<()> {
@@ -100,15 +129,15 @@ impl BlockProcessor {
                 blocks_behind = latest_block.saturating_sub(current_block)
             );
 
-            metrics.record_sync_status(current_block, latest_block);
+            self.metrics.record_sync_status(current_block, latest_block);
 
             while current_block <= latest_block {
                 match self.fetch_block(current_block).await {
                     Ok(block) => {
                         match self.blocks_channel.0.send(block.clone()) {
                             Ok(_) => {
-                                metrics.record_block(&block);
-                                metrics.record_processing_time(start_time);
+                                self.metrics.record_block(&block);
+                                self.metrics.record_processing_time(start_time);
                                 
                                 info!(
                                     event = "block_processed",

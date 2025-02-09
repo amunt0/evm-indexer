@@ -68,35 +68,105 @@ impl BlockProcessor {
     }
 
     pub async fn process_blocks(&self, start_block: Option<u64>) -> Result<()> {
+        info!(
+            event = "block_processing_started",
+            message = "Starting block processing",
+            start_block = ?start_block,
+        );
+    
         let mut current_block = match start_block {
-            Some(block) => block,
-            None => self.get_latest_block_number().await?,
+            Some(block) => {
+                info!(
+                    event = "using_start_block",
+                    message = "Using provided start block",
+                    block = block
+                );
+                block
+            },
+            None => {
+                let latest = self.get_latest_block_number().await?;
+                info!(
+                    event = "using_latest_block",
+                    message = "Using latest block as start",
+                    block = latest
+                );
+                latest
+            },
         };
-
+    
         self.latest_block.store(current_block, Ordering::SeqCst);
         
+        info!(
+            event = "processing_loop_started",
+            message = "Entering main processing loop",
+            current_block = current_block
+        );
+    
         loop {
-            let latest_block = self.get_latest_block_number().await?;
+            let latest_block = match self.get_latest_block_number().await {
+                Ok(block) => block,
+                Err(e) => {
+                    error!(
+                        event = "latest_block_error",
+                        message = "Failed to get latest block number",
+                        error = %e
+                    );
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                    continue;
+                }
+            };
             
+            info!(
+                event = "sync_status",
+                message = "Block sync status",
+                current_block = current_block,
+                latest_block = latest_block,
+                blocks_behind = latest_block.saturating_sub(current_block)
+            );
+    
             while current_block <= latest_block {
                 match self.fetch_block(current_block).await {
                     Ok(block) => {
-                        if let Err(e) = self.blocks_channel.0.send(block) {
-                            warn!("Failed to send block through channel: {}", e);
-                            continue;
+                        match self.blocks_channel.0.send(block.clone()) {
+                            Ok(_) => {
+                                info!(
+                                    event = "block_processed",
+                                    message = "Successfully processed block",
+                                    block_number = current_block,
+                                    tx_count = block.transactions.len(),
+                                );
+                                self.latest_block.store(current_block, Ordering::SeqCst);
+                                current_block += 1;
+                            },
+                            Err(e) => {
+                                error!(
+                                    event = "channel_send_error",
+                                    message = "Failed to send block through channel",
+                                    error = %e,
+                                    block_number = current_block
+                                );
+                                continue;
+                            }
                         }
-                        
-                        info!("Processed block {}", current_block);
-                        self.latest_block.store(current_block, Ordering::SeqCst);
-                        current_block += 1;
                     }
                     Err(e) => {
-                        warn!("Failed to fetch block {}: {}", current_block, e);
+                        error!(
+                            event = "block_fetch_error",
+                            message = "Failed to fetch block",
+                            error = %e,
+                            block_number = current_block
+                        );
                         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                     }
                 }
             }
-
+    
+            // If we've caught up, wait a bit before checking for new blocks
+            info!(
+                event = "sync_complete",
+                message = "Caught up to latest block, waiting for new blocks",
+                current_block = current_block
+            );
             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
         }
     }

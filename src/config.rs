@@ -36,7 +36,13 @@ impl Config {
                 .unwrap_or(10000),
             start_block: std::env::var("START_BLOCK")
                 .ok()
-                .and_then(|v| v.parse().ok()),
+                .and_then(|v| {
+                    // Try parsing as regular integer first
+                    v.parse::<u64>().ok().or_else(|| {
+                        // If that fails, try parsing as float and convert to integer
+                        v.parse::<f64>().ok().map(|f| f as u64)
+                    })
+                }),
         })
     }
 }

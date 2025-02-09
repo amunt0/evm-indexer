@@ -36,15 +36,32 @@ impl BlockProcessor {
     }
 
     pub async fn get_latest_block_number(&self) -> Result<u64> {
-        let block_number = self.web3_client
-            .eth()
-            .block_number()
-            .await
-            .map_err(|e| IndexerError::RpcError(e.to_string()))?;
-        
-        Ok(block_number.as_u64())
+        info!(
+            event = "fetching_latest_block",
+            message = "Attempting to get latest block number",
+            rpc_endpoint = self.web3_client.enode()
+        );
+    
+        match self.web3_client.eth().block_number().await {
+            Ok(block_number) => {
+                let number = block_number.as_u64();
+                info!(
+                    event = "latest_block_fetched",
+                    message = "Successfully got latest block number",
+                    block_number = number
+                );
+                Ok(number)
+            },
+            Err(e) => {
+                error!(
+                    event = "latest_block_error",
+                    message = "Failed to get latest block number",
+                    error = %e
+                );
+                Err(IndexerError::RpcError(e.to_string()).into())
+            }
+        }
     }
-
     async fn fetch_block(&self, block_number: u64) -> Result<Block> {
         let block = self.web3_client
             .eth()

@@ -7,6 +7,8 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use crate::config::Config;
 use futures::future::try_join_all;
+use tokio::signal;
+use warp::Filter;
 
 pub use block_processor::BlockProcessor;
 pub use metrics::MetricsCollector;
@@ -39,11 +41,11 @@ impl Indexer {
         let processor = self.block_processor.clone();
         let storage = self.storage_manager.clone();
         let metrics = self.metrics_collector.clone();
-
+    
         let process_handle = tokio::spawn(async move {
             processor.process_blocks(config_start_block).await
         });
-
+    
         let storage_handle = tokio::spawn(async move {
             while let Ok(block) = block_receiver.recv() {
                 metrics.record_block(&block);
@@ -55,14 +57,52 @@ impl Indexer {
             }
             Ok::<(), anyhow::Error>(())
         });
-
+    
         let handles = vec![process_handle, storage_handle];
         
-        // Wait for all tasks to complete
-        for result in try_join_all(handles).await? {
-            result?;
+        tokio::select! {
+            _ = Self::shutdown_signal() => {
+                info!(event = "shutdown", message = "Received shutdown signal");
+            }
+            result = try_join_all(handles) => {
+                result??;
+            }
         }
-
+    
         Ok(())
     }
+
+    async fn serve_healthcheck() {
+        let health_route = warp::path!("health")
+            .map(|| warp::reply::json(&serde_json::json!({"status": "ok"})));
+        
+        warp::serve(health_route)
+            .run(([0, 0, 0, 0], 8080))
+            .await;
+    }
 }
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+}
+

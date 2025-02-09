@@ -14,25 +14,21 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn load() -> Result<Self> {
-        let mut builder = ConfigSource::builder()
-            .set_default("blocks_in_memory", 1000)?
-            .set_default("rotation_blocks", 10000)?
-            .set_default("metrics_port", 9090)?
-            .set_default("data_dir", "./data")?;
-
-        if let Ok(config_path) = std::env::var("CONFIG_PATH") {
-            builder = builder.add_source(File::with_name(&config_path));
-        }
-
-        builder = builder.add_source(
-            Environment::with_prefix("INDEXER")
-                .separator("_")
-                .try_parsing(true)
-        );
-
-        let config = builder.build()?;
-        Ok(config.try_deserialize()?)
+    pub fn from_env() -> Result<Self> {
+        Ok(Self {
+            rpc_endpoint: std::env::var("RPC_ENDPOINT")
+                .unwrap_or_else(|_| "https://rpc.sepolia.org".to_string()),
+            blocks_in_memory: std::env::var("BLOCKS_IN_MEMORY")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(1000),
+            metrics_port: std::env::var("METRICS_PORT")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(9090),
+            data_dir: PathBuf::from(std::env::var("DATA_DIR")
+                .unwrap_or_else(|_| "./data".to_string())),
+        })
     }
 }
 

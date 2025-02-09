@@ -86,12 +86,15 @@ impl Indexer {
         tokio::select! {
             _ = Self::shutdown_signal() => {
                 info!(event = "shutdown", message = "Received shutdown signal");
+                Ok(())
             }
             result = try_join_all(handles) => {
-                result??;
+                // Properly handle the joined results
+                for task_result in result? {
+                    task_result?;
+                }
+                Ok(())
             }
         }
-
-        Ok(())
     }
 }

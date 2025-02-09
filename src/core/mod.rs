@@ -5,9 +5,9 @@ mod storage;
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use crate::config::Config;
 use futures::future::try_join_all;
 use tracing::{info, error};
-use crate::config::Config;
 
 pub use block_processor::BlockProcessor;
 pub use metrics::MetricsCollector;
@@ -24,7 +24,7 @@ impl Indexer {
     pub async fn new(config: Config) -> Result<Self> {
         let metrics_collector = MetricsCollector::new(config.metrics_port)?;
         let storage_manager = Arc::new(Mutex::new(StorageManager::new(&config)?));
-        let block_processor = Arc::new(BlockProcessor::new(&config).await?);
+        let block_processor = Arc::new(BlockProcessor::new(&config, metrics_collector.clone()).await?);
 
         Ok(Self {
             block_processor,
@@ -32,30 +32,6 @@ impl Indexer {
             metrics_collector,
             config,
         })
-    }
-
-    async fn shutdown_signal() {
-        let ctrl_c = async {
-            tokio::signal::ctrl_c()
-                .await
-                .expect("failed to install Ctrl+C handler");
-        };
-
-        #[cfg(unix)]
-        let terminate = async {
-            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-                .expect("failed to install signal handler")
-                .recv()
-                .await;
-        };
-
-        #[cfg(not(unix))]
-        let terminate = std::future::pending::<()>();
-
-        tokio::select! {
-            _ = ctrl_c => {},
-            _ = terminate => {},
-        }
     }
 
     pub async fn run(&self) -> Result<()> {
@@ -83,18 +59,10 @@ impl Indexer {
 
         let handles = vec![process_handle, storage_handle];
         
-        tokio::select! {
-            _ = Self::shutdown_signal() => {
-                info!(event = "shutdown", message = "Received shutdown signal");
-                Ok(())
-            }
-            result = try_join_all(handles) => {
-                // Properly handle the joined results
-                for task_result in result? {
-                    task_result?;
-                }
-                Ok(())
-            }
+        for result in try_join_all(handles).await? {
+            result?;
         }
+
+        Ok(())
     }
 }

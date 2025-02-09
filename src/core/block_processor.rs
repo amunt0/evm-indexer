@@ -21,11 +21,10 @@ pub struct BlockProcessor {
 }
 
 impl BlockProcessor {
-    pub async fn new(config: &Config) -> Result<Self> {
+    pub async fn new(config: &Config, metrics: MetricsCollector) -> Result<Self> {
         let transport = web3::transports::Http::new(&config.rpc_endpoint)?;
         let web3_client = Web3::new(transport);
         let blocks_channel = channel::bounded(config.blocks_in_memory);
-        let metrics = MetricsCollector::new(config.metrics_port)?;
         
         Ok(Self {
             web3_client,
